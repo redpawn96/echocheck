@@ -1,0 +1,40 @@
+import type { ButtonHTMLAttributes } from "react";
+
+import { cn } from "../../lib/cn";
+
+type ButtonVariant = "primary" | "secondary" | "ghost" | "accent" | "danger";
+type ButtonSize = "sm" | "md" | "lg";
+
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+};
+
+const variantClassMap: Record<ButtonVariant, string> = {
+  primary: "bg-brandTeal text-white hover:bg-teal-700",
+  secondary: "bg-slate-900 text-white hover:bg-slate-800",
+  ghost: "bg-slate-100 text-slate-700 hover:bg-slate-200",
+  accent: "bg-brandCoral text-white hover:bg-orange-600",
+  danger: "bg-rose-600 text-white hover:bg-rose-700",
+};
+
+const sizeClassMap: Record<ButtonSize, string> = {
+  sm: "px-3 py-1.5 text-xs",
+  md: "px-4 py-2 text-sm",
+  lg: "px-5 py-2.5 text-base",
+};
+
+export function Button({ className, variant = "primary", size = "md", type = "button", ...props }: ButtonProps) {
+  return (
+    <button
+      type={type}
+      className={cn(
+        "pointer-events-auto inline-flex cursor-pointer items-center justify-center rounded-xl font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
+        variantClassMap[variant],
+        sizeClassMap[size],
+        className,
+      )}
+      {...props}
+    />
+  );
+}

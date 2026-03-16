@@ -47,6 +47,10 @@
     "status": "queued"
   }
 
+- Error responses:
+  - 402: {"detail": "Active subscription required"}
+  - 429: {"detail": "Monthly quota exceeded"}
+
 ## Workspaces
 - POST /v1/workspaces
 - Header: Authorization: Bearer <token>
@@ -100,6 +104,34 @@
     ]
   }
 
+## GEO Expansion (Proposed)
+See docs/geo-expansion-contracts.md for shared contract definitions and docs/visibility-graph-v1-spec.md for the next delivery slice.
+
+- GET /v1/geo/visibility?workspaceId={id}&brandId={id}&range=4w|12w&providers=openai,gemini&competitorIds=id1,id2
+- Proposed response shape:
+  {
+    "workspaceId": "uuid",
+    "brandId": "uuid",
+    "range": "4w",
+    "series": [
+      {
+        "entityType": "brand",
+        "entityId": "uuid",
+        "entityLabel": "EchoCheck",
+        "provider": "openai",
+        "points": [
+          {
+            "weekStart": "2026-03-02",
+            "visibilityRate": 0.42,
+            "sampleCount": 24,
+            "deltaVsPreviousWeek": 0.05,
+            "confidence": "medium"
+          }
+        ]
+      }
+    ]
+  }
+
 ## Billing
 - POST /v1/billing/checkout-session
 - Header: Authorization: Bearer <token>
@@ -113,3 +145,15 @@
 
 - POST /v1/billing/webhook
 - Header: Stripe-Signature
+
+- GET /v1/billing/usage?workspaceId={id}
+- Header: Authorization: Bearer <token>
+- Response:
+  {
+    "workspaceId": "uuid",
+    "month": "2026-03",
+    "subscriptionStatus": "active|inactive|pending",
+    "monthlyQuota": 100,
+    "used": 12,
+    "remaining": 88
+  }

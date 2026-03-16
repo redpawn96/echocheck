@@ -11,3 +11,12 @@ class CheckoutSessionRequest(BaseModel):
 class CheckoutSessionResponse(BaseModel):
     checkout_url: str = Field(alias="checkoutUrl")
     session_id: str = Field(alias="sessionId")
+
+
+class UsageSummaryResponse(BaseModel):
+    workspace_id: str = Field(alias="workspaceId")
+    month: str
+    subscription_status: str = Field(alias="subscriptionStatus")
+    monthly_quota: int = Field(alias="monthlyQuota")
+    used: int
+    remaining: int

@@ -1,17 +1,35 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from datetime import UTC, datetime
+from datetime import time as dt_time
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 import stripe
 
 from app.api.dependencies import get_current_user
 from app.api.routes_workspaces import assert_workspace_owner
 from app.core.config import settings
-from app.db.models import Subscription, User
+from app.db.models import Subscription, UsageEvent, User
 from app.db.session import get_db
-from app.schemas.billing import CheckoutSessionRequest, CheckoutSessionResponse
+from app.schemas.billing import CheckoutSessionRequest, CheckoutSessionResponse, UsageSummaryResponse
 
 router = APIRouter(prefix="/v1/billing", tags=["billing"])
 
-stripe.api_key = settings.stripe_secret_key
+
+def _require_stripe_secret_key() -> None:
+    if not settings.stripe_secret_key:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Billing provider not configured")
+    stripe.api_key = settings.stripe_secret_key
+
+
+def _month_window_utc() -> tuple[datetime, datetime]:
+    now = datetime.now(UTC)
+    month_start = datetime.combine(now.date().replace(day=1), dt_time.min)
+    if now.month == 12:
+        next_month_start = datetime(year=now.year + 1, month=1, day=1)
+    else:
+        next_month_start = datetime(year=now.year, month=now.month + 1, day=1)
+    return month_start, next_month_start
 
 
 @router.post("/checkout-session", response_model=CheckoutSessionResponse)
@@ -20,6 +38,7 @@ def create_checkout_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> CheckoutSessionResponse:
+    _require_stripe_secret_key()
     workspace = assert_workspace_owner(db, payload.workspace_id, current_user.id)
 
     subscription = db.query(Subscription).filter(Subscription.workspace_id == workspace.id).first()
@@ -29,14 +48,17 @@ def create_checkout_session(
         db.commit()
         db.refresh(subscription)
 
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        line_items=[{"price": payload.price_id, "quantity": 1}],
-        success_url=payload.success_url,
-        cancel_url=payload.cancel_url,
-        client_reference_id=workspace.id,
-        metadata={"workspace_id": workspace.id},
-    )
+    try:
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            line_items=[{"price": payload.price_id, "quantity": 1}],
+            success_url=payload.success_url,
+            cancel_url=payload.cancel_url,
+            client_reference_id=workspace.id,
+            metadata={"workspace_id": workspace.id},
+        )
+    except stripe.error.StripeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Stripe checkout session failed") from exc
 
     return CheckoutSessionResponse(checkoutUrl=session.url, sessionId=session.id)
 
@@ -47,6 +69,7 @@ async def stripe_webhook(
     stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
     db: Session = Depends(get_db),
 ) -> dict[str, bool]:
+    _require_stripe_secret_key()
     if not settings.stripe_webhook_secret:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Webhook not configured")
 
@@ -58,6 +81,8 @@ async def stripe_webhook(
         event = stripe.Webhook.construct_event(payload, stripe_signature, settings.stripe_webhook_secret)
     except stripe.error.SignatureVerificationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature") from exc
+    except stripe.error.StripeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Stripe webhook validation failed") from exc
 
     if event["type"] == "checkout.session.completed":
         data = event["data"]["object"]
@@ -72,3 +97,38 @@ async def stripe_webhook(
             db.commit()
 
     return {"received": True}
+
+
+@router.get("/usage", response_model=UsageSummaryResponse)
+def get_usage_summary(
+    workspace_id: str = Query(alias="workspaceId"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UsageSummaryResponse:
+    workspace = assert_workspace_owner(db, workspace_id, current_user.id)
+    subscription = db.scalar(select(Subscription).where(Subscription.workspace_id == workspace.id))
+
+    month_start, next_month_start = _month_window_utc()
+    used = db.scalar(
+        select(func.coalesce(func.sum(UsageEvent.units), 0)).where(
+            and_(
+                UsageEvent.workspace_id == workspace.id,
+                UsageEvent.created_at >= month_start,
+                UsageEvent.created_at < next_month_start,
+            )
+        )
+    )
+
+    monthly_quota = int(subscription.monthly_quota) if subscription else 0
+    used_units = int(used or 0)
+    remaining = max(monthly_quota - used_units, 0)
+    status_value = subscription.status if subscription else "inactive"
+
+    return UsageSummaryResponse(
+        workspaceId=workspace.id,
+        month=month_start.strftime("%Y-%m"),
+        subscriptionStatus=status_value,
+        monthlyQuota=monthly_quota,
+        used=used_units,
+        remaining=remaining,
+    )

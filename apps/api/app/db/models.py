@@ -97,3 +97,14 @@ class Subscription(Base):
     status: Mapped[str] = mapped_column(String(40), default="inactive")
     monthly_quota: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class UsageEvent(Base):
+    __tablename__ = "usage_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(60), index=True)
+    units: Mapped[int] = mapped_column(Integer, default=1)
+    metadata_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)

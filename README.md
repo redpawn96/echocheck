@@ -49,7 +49,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173 and http://localhost:8000/health.
+Open http://localhost:5173, http://localhost:8000/health, and http://localhost:8000/ready.
 
 ### 5) Run API smoke test
 ```bash
@@ -85,3 +85,20 @@ nox -s all_tests
 
 Note: `nox -s smoke` expects a running API at `http://localhost:8000` by default.
 Set `SMOKE_BASE_URL` to target another environment.
+
+## Launch Readiness
+
+Use the launch checklist before release:
+
+```bash
+cat docs/launch-checklist.md
+```
+
+Quick verification commands:
+
+```bash
+pytest -m unit tests/unit
+pytest -m api tests/api
+pytest -m smoke tests/smoke
+cd apps/web && npm run build
+```

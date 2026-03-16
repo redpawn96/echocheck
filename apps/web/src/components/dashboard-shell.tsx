@@ -15,6 +15,11 @@ import {
   register,
   type Workspace,
 } from "../lib/api";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Input } from "./ui/input";
+import { Select } from "./ui/select";
 
 const TOKEN_KEY = "echocheck_auth_token";
 
@@ -48,59 +53,76 @@ function AuthPanel({
   });
 
   return (
-    <section className="rounded-3xl border border-teal-200 bg-white/90 p-6 shadow-lg">
+    <Card className="relative z-10 border-teal-200 stage-in stage-in-1">
       <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">Sign In</p>
-      <h2 className="mt-2 font-display text-2xl">Connect your workspace</h2>
-      <p className="mt-2 text-sm text-slate-600">Use register once, then login for future sessions.</p>
+      <CardTitle>Connect your workspace</CardTitle>
+      <CardDescription>Use register once, then login for future sessions.</CardDescription>
 
-      <div className="mt-5 grid gap-3">
-        <input
-          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-          placeholder="Email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-        <input
-          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-          placeholder="Password"
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-      </div>
-
-      <div className="mt-4 flex gap-2">
-        <button
-          className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-            mode === "register" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-700"
-          }`}
-          onClick={() => setMode("register")}
-          type="button"
-        >
-          Register
-        </button>
-        <button
-          className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-            mode === "login" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-700"
-          }`}
-          onClick={() => setMode("login")}
-          type="button"
-        >
-          Login
-        </button>
-      </div>
-
-      <button
-        className="mt-4 w-full rounded-xl bg-brandCoral px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-        type="button"
-        onClick={() => mutation.mutate()}
-        disabled={mutation.isPending}
+      <form
+        className="contents"
+        onSubmit={(event) => {
+          event.preventDefault();
+          mutation.mutate();
+        }}
       >
-        {mutation.isPending ? "Authenticating..." : mode === "register" ? "Create account" : "Sign in"}
-      </button>
+        <div className="mt-5 grid gap-3">
+          <Input
+            placeholder="Email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <Input
+            placeholder="Password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <Button
+            variant={mode === "register" ? "primary" : "ghost"}
+            onClick={() => setMode("register")}
+          >
+            Register
+          </Button>
+          <Button
+            variant={mode === "login" ? "primary" : "ghost"}
+            onClick={() => setMode("login")}
+          >
+            Login
+          </Button>
+        </div>
+
+        <Button className="mt-4 w-full" variant="accent" type="submit" disabled={mutation.isPending}>
+          {mutation.isPending ? "Authenticating..." : mode === "register" ? "Create account" : "Sign in"}
+        </Button>
+      </form>
 
       {mutation.error ? <p className="mt-3 text-sm text-red-600">{String(mutation.error)}</p> : null}
-    </section>
+    </Card>
+  );
+}
+
+function statusToVariant(status: string | undefined): "neutral" | "success" | "warning" | "danger" {
+  if (status === "completed") return "success";
+  if (status === "failed") return "danger";
+  if (status === "running" || status === "queued") return "warning";
+  return "neutral";
+}
+
+function KpiCard({ label, value, tone }: { label: string; value: string | number; tone: "teal" | "green" | "rose" }) {
+  const toneMap = {
+    teal: "border-teal-100 bg-teal-50 text-teal-700",
+    green: "border-emerald-100 bg-emerald-50 text-emerald-700",
+    rose: "border-rose-100 bg-rose-50 text-rose-700",
+  };
+
+  return (
+    <article className={`rounded-2xl border p-4 ${toneMap[tone]}`}>
+      <p className="text-xs uppercase tracking-[0.16em]">{label}</p>
+      <p className="mt-2 text-3xl font-semibold text-slate-900">{value}</p>
+    </article>
   );
 }
 
@@ -187,6 +209,9 @@ export function DashboardShell() {
     return `Authenticated (${token.slice(0, 8)}...)`;
   }, [token]);
 
+  const runStatus = runStatusQuery.data?.status;
+  const runBadgeVariant = statusToVariant(runStatus);
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#e6fffb,_#ffffff_40%,_#ffece7_95%)] text-slate-900">
       <section className="mx-auto max-w-6xl px-6 py-12 md:py-16">
@@ -197,7 +222,10 @@ export function DashboardShell() {
         <p className="mt-3 max-w-3xl text-lg text-slate-600">
           Register, create a brand workspace, run a GEO scan, and read your weekly mention report from live backend data.
         </p>
-        <p className="mt-2 text-sm text-slate-500">{authSummary}</p>
+        <div className="mt-3 flex items-center gap-3 text-sm text-slate-500">
+          <span>{authSummary}</span>
+          {latestRunId ? <Badge variant={runBadgeVariant}>{runStatus ?? "queued"}</Badge> : null}
+        </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           {!token ? (
@@ -207,15 +235,15 @@ export function DashboardShell() {
               }}
             />
           ) : (
-            <section className="rounded-3xl border border-teal-200 bg-white/90 p-6 shadow-lg">
-              <div className="flex items-start justify-between gap-4">
+            <Card className="border-teal-200 stage-in stage-in-1">
+              <CardHeader>
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">Setup</p>
-                  <h2 className="mt-2 font-display text-2xl">Workspace and brand</h2>
+                  <CardTitle>Workspace and brand</CardTitle>
                 </div>
-                <button
-                  type="button"
-                  className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
                     setToken("");
                     setActiveWorkspaceId("");
@@ -225,30 +253,24 @@ export function DashboardShell() {
                   }}
                 >
                   Sign out
-                </button>
-              </div>
+                </Button>
+              </CardHeader>
 
               <div className="mt-5 grid gap-3">
-                <input
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                <Input
                   value={workspaceName}
                   onChange={(event) => setWorkspaceName(event.target.value)}
                   placeholder="Workspace name"
                 />
-                <button
-                  type="button"
-                  className="rounded-xl bg-brandTeal px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                  onClick={() => createWorkspaceMutation.mutate()}
-                  disabled={createWorkspaceMutation.isPending || !workspaceName.trim()}
-                >
+                <Button onClick={() => createWorkspaceMutation.mutate()} disabled={createWorkspaceMutation.isPending || !workspaceName.trim()}>
                   {createWorkspaceMutation.isPending ? "Creating..." : "Create workspace"}
-                </button>
+                </Button>
               </div>
 
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Workspace</p>
-                <select
-                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                <Select
+                  className="mt-2"
                   value={activeWorkspaceId}
                   onChange={(event) => {
                     setActiveWorkspaceId(event.target.value);
@@ -261,36 +283,33 @@ export function DashboardShell() {
                       {workspace.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
 
               <div className="mt-4 grid gap-3">
-                <input
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                <Input
                   value={brandName}
                   onChange={(event) => setBrandName(event.target.value)}
                   placeholder="Brand name"
                 />
-                <input
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                <Input
                   value={industry}
                   onChange={(event) => setIndustry(event.target.value)}
                   placeholder="Industry"
                 />
-                <button
-                  type="button"
-                  className="rounded-xl bg-brandCoral px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                <Button
+                  variant="accent"
                   onClick={() => createBrandMutation.mutate()}
                   disabled={createBrandMutation.isPending || !activeWorkspaceId || !brandName.trim() || !industry.trim()}
                 >
                   {createBrandMutation.isPending ? "Creating..." : "Create brand"}
-                </button>
+                </Button>
               </div>
 
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Brand</p>
-                <select
-                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                <Select
+                  className="mt-2"
                   value={activeBrandId}
                   onChange={(event) => setActiveBrandId(event.target.value)}
                 >
@@ -300,51 +319,47 @@ export function DashboardShell() {
                       {brand.name} ({brand.industry})
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
 
-              <button
-                type="button"
-                className="mt-4 w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              <Button
+                className="mt-4 w-full"
+                variant="secondary"
                 onClick={() => runMutation.mutate()}
                 disabled={runMutation.isPending || !activeWorkspaceId || !activeBrandId}
               >
                 {runMutation.isPending ? "Queueing run..." : "Run GEO visibility check"}
-              </button>
+              </Button>
 
               {latestRunId ? (
-                <p className="mt-3 text-xs text-slate-600">
-                  Last run: {latestRunId} ({runStatusQuery.data?.status ?? "queued"})
-                </p>
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                  <p className="truncate">Last run: {latestRunId}</p>
+                  <p className="mt-1">State: {runStatusQuery.data?.status ?? "queued"}</p>
+                </div>
               ) : null}
-            </section>
+            </Card>
           )}
 
-          <section className="rounded-3xl border border-cyan-200 bg-white/90 p-6 shadow-lg">
+          <Card className="border-cyan-200 stage-in stage-in-2">
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Weekly Report</p>
-            <h2 className="mt-2 font-display text-2xl">AI Share of Voice Snapshot</h2>
+            <CardTitle>AI Share of Voice Snapshot</CardTitle>
 
             {!token || !activeBrandId ? (
               <p className="mt-4 text-sm text-slate-600">Create and select a brand to view report metrics.</p>
             ) : reportQuery.isLoading ? (
-              <p className="mt-4 text-sm text-slate-600">Loading report...</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="h-24 animate-pulse rounded-2xl bg-slate-100" />
+                <div className="h-24 animate-pulse rounded-2xl bg-slate-100" />
+                <div className="h-24 animate-pulse rounded-2xl bg-slate-100" />
+              </div>
             ) : reportQuery.error ? (
               <p className="mt-4 text-sm text-red-600">{String(reportQuery.error)}</p>
             ) : reportQuery.data ? (
               <div className="mt-6 grid gap-4">
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <article className="rounded-2xl border border-teal-100 bg-teal-50 p-4">
-                    <p className="text-xs uppercase tracking-[0.16em] text-teal-700">Mention Rate</p>
-                    <p className="mt-2 text-3xl font-semibold">{Math.round(reportQuery.data.mentionRate * 100)}%</p>
-                  </article>
-                  <article className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                    <p className="text-xs uppercase tracking-[0.16em] text-emerald-700">Positive</p>
-                    <p className="mt-2 text-3xl font-semibold">{reportQuery.data.sentiment.positive}</p>
-                  </article>
-                  <article className="rounded-2xl border border-rose-100 bg-rose-50 p-4">
-                    <p className="text-xs uppercase tracking-[0.16em] text-rose-700">Negative</p>
-                    <p className="mt-2 text-3xl font-semibold">{reportQuery.data.sentiment.negative}</p>
-                  </article>
+                  <KpiCard label="Mention Rate" value={`${Math.round(reportQuery.data.mentionRate * 100)}%`} tone="teal" />
+                  <KpiCard label="Positive" value={reportQuery.data.sentiment.positive} tone="green" />
+                  <KpiCard label="Negative" value={reportQuery.data.sentiment.negative} tone="rose" />
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -371,7 +386,7 @@ export function DashboardShell() {
                 </div>
               </div>
             ) : null}
-          </section>
+          </Card>
         </div>
       </section>
     </main>
